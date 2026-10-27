@@ -1,80 +1,48 @@
+"""Independent theoretical limits for the nonlinear numerical model."""
+
+from math import radians
+
 import pytest
 
 from src.analytical import (
-    vacuum_flight_time,
-    vacuum_max_height,
-    vacuum_position,
-    vacuum_range,
-    vacuum_velocity,
+    exact_frictionless_period,
+    small_angle_damped_angle,
+    small_angle_damped_period,
+    small_angle_period,
 )
-from src.models import LaunchParameters
+from src.models import PendulumParameters
 
 
-def test_vacuum_characteristics() -> None:
-    parameters = LaunchParameters(
-        initial_speed=20.0,
-        angle_deg=45.0,
-        mass=0.2,
-    )
-
-    _, vy0 = parameters.initial_velocity()
-
-    expected_flight_time = (
-        2 * vy0 / parameters.gravity
-    )
-
-    expected_max_height = (
-        vy0 ** 2
-        / (2 * parameters.gravity)
-    )
-
-    expected_range = (
-        parameters.initial_speed ** 2
-        / parameters.gravity
-    )
-
-    assert vacuum_flight_time(parameters) == pytest.approx(
-        expected_flight_time
-    )
-
-    assert vacuum_max_height(parameters) == pytest.approx(
-        expected_max_height
-    )
-
-    assert vacuum_range(parameters) == pytest.approx(
-        expected_range
-    )
+@pytest.fixture
+def parameters() -> PendulumParameters:
+    return PendulumParameters(0.8, 0.2, 0.08, 0.5)
 
 
-def test_vacuum_landing_state() -> None:
-    parameters = LaunchParameters(
-        initial_speed=20.0,
-        angle_deg=45.0,
-        mass=0.2,
-    )
+def test_exact_period_tends_to_small_angle_limit(parameters: PendulumParameters) -> None:
+    assert exact_frictionless_period(parameters, 0) == pytest.approx(small_angle_period(parameters))
+    assert exact_frictionless_period(parameters, 5) < exact_frictionless_period(parameters, 60)
+    assert exact_frictionless_period(parameters, 60) < exact_frictionless_period(parameters, 150)
 
-    vx0, vy0 = parameters.initial_velocity()
-    flight_time = vacuum_flight_time(parameters)
 
-    landing_x, landing_y = vacuum_position(
-        time=flight_time,
-        parameters=parameters,
-    )
+def test_damped_small_angle_solution_starts_from_rest() -> None:
+    parameters = PendulumParameters(0.8, 0.2, 0.08, 0.5, damping=0.015)
+    angle = small_angle_damped_angle(0.0, parameters, 5)
+    numerical_initial_slope = (
+        small_angle_damped_angle(1e-5, parameters, 5)
+        - small_angle_damped_angle(-0.0, parameters, 5)
+    ) / 1e-5
+    assert angle == pytest.approx(radians(5))
+    assert numerical_initial_slope == pytest.approx(0.0, abs=1e-5)
+    assert small_angle_damped_period(parameters) > small_angle_period(parameters)
 
-    landing_vx, landing_vy = vacuum_velocity(
-        time=flight_time,
-        parameters=parameters,
-    )
 
-    assert landing_x == pytest.approx(
-        vacuum_range(parameters)
-    )
-
-    assert landing_y == pytest.approx(
-        0.0,
-        abs=1e-12,
-    )
-
-    assert landing_vx == pytest.approx(vx0)
-    assert landing_vy == pytest.approx(-vy0)
-
+def test_invalid_amplitude_and_overdamping(parameters: PendulumParameters) -> None:
+    with pytest.raises(ValueError):
+        exact_frictionless_period(parameters, 180)
+    with pytest.raises(ValueError):
+        exact_frictionless_period(parameters, -1)
+    overdamped = PendulumParameters(0.8, 0.2, 0.08, 0.5, damping=10)
+    with pytest.raises(ValueError):
+        small_angle_damped_period(overdamped)
+    with pytest.raises(ValueError):
+        small_angle_damped_angle(1, overdamped, 5)

@@ -1,115 +1,83 @@
+"""Numerical integration and period measurement for the physical pendulum."""
+
 from dataclasses import dataclass
-from src.models import (
-    DragModel,
-    LaunchParameters,
-    motion_equations,
-)
+from math import isfinite
+
 import numpy as np
 from scipy.integrate import solve_ivp
 
+from src.models import InitialConditions, PendulumParameters, motion_equations
+
+
+def _downward_crossing(time: float, state: np.ndarray, parameters: PendulumParameters) -> float:
+    return float(state[0])
+
+
+_downward_crossing.direction = -1
+_downward_crossing.terminal = False
+
+
 @dataclass(frozen=True)
-class TrajectoryResult:
+class PendulumResult:
     time: np.ndarray
-    x: np.ndarray
-    y: np.ndarray
-    vx: np.ndarray
-    vy: np.ndarray
-    apex_height: float | None = None
+    angle: np.ndarray  # rad
+    angular_velocity: np.ndarray  # rad/s
+    energy: np.ndarray  # J
+    downward_crossings: np.ndarray  # s; one crossing per full oscillation
 
     @property
-    def flight_time(self) -> float:
-        return float(self.time[-1])
+    def period(self) -> float:
+        if len(self.downward_crossings) < 2:
+            raise ValueError("Для измерения периода нужны два прохода через нижнюю точку")
+        return float(self.downward_crossings[1] - self.downward_crossings[0])
 
     @property
-    def horizontal_range(self) -> float:
-        return float(self.x[-1] - self.x[0])
-
-    @property
-    def max_height(self) -> float:
-        if self.apex_height is not None:
-            return self.apex_height
-
-        return float(np.max(self.y))
-
-    @property
-    def impact_speed(self) -> float:
-        final_vx = self.vx[-1]
-        final_vy = self.vy[-1]
-
-        return float(np.hypot(final_vx, final_vy))
-
-def create_initial_state(
-        parameters: LaunchParameters,
-) -> np.ndarray:
-    vx0, vy0 = parameters.initial_velocity()
-
-    initial_state = np.array(
-        [
-            0.0,
-            parameters.initial_height,
-            vx0,
-            vy0,
-        ],
-        dtype=float,
-    )
-
-    return initial_state
-
-def ground_event(
-        time: float,
-        state: np.ndarray,
-        parameters: LaunchParameters,
-        model: DragModel,
-        drag_coeff: float,
-) -> float:
-    return float(state[1])
+    def relative_energy_drift(self) -> float:
+        initial = float(self.energy[0])
+        if initial == 0:
+            raise ValueError("При нулевой начальной энергии относительное изменение не определено")
+        return float(np.max(np.abs(self.energy - initial)) / initial)
 
 
-ground_event.terminal = True
-ground_event.direction = -1
-def apex_event(
-        time: float,
-        state: np.ndarray,
-        parameters: LaunchParameters,
-        model: DragModel,
-        drag_coeff: float,
-) -> float:
-    return float(state[3])
+def solve_pendulum(
+    parameters: PendulumParameters,
+    initial: InitialConditions,
+    duration: float = 20.0,
+    samples: int = 2001,
+    max_step: float = 0.02,
+    rtol: float = 1e-10,
+    atol: float = 1e-12,
+) -> PendulumResult:
+    if not isfinite(duration) or duration <= 0:
+        raise ValueError("Длительность расчёта должна быть положительной и конечной")
+    if samples < 2:
+        raise ValueError("Нужно как минимум две точки графика")
+    if not isfinite(max_step) or max_step <= 0:
+        raise ValueError("Шаг интегрирования должен быть положительным и конечным")
 
-
-apex_event.terminal = False
-apex_event.direction = -1
-
-
-def solve_trajectory(
-        parameters: LaunchParameters,
-        model: DragModel = DragModel.NONE,
-        drag_coeff: float = 0.0,
-        max_step: float = 0.02,
-        rtol: float = 1e-9,
-        atol: float = 1e-11,
-) -> TrajectoryResult:
-    initial_state = create_initial_state(parameters)
-
+    times = np.linspace(0.0, duration, samples)
     solution = solve_ivp(
-        fun=motion_equations,
-        t_span=(0.0, 100.0),
-        y0=initial_state,
-        args=(parameters, model, drag_coeff),
-        events=(ground_event, apex_event),
+        motion_equations,
+        (0.0, duration),
+        (initial.angle_rad, initial.angular_velocity),
+        args=(parameters,),
+        events=_downward_crossing,
+        t_eval=times,
         max_step=max_step,
         rtol=rtol,
         atol=atol,
     )
-    if len(solution.y_events[1]) > 0:
-        apex_height = float(solution.y_events[1][0][1])
-    else:
-        apex_height = None
-    return TrajectoryResult(
+    if not solution.success:
+        raise RuntimeError(f"Численное интегрирование не удалось: {solution.message}")
+    angle, angular_velocity = solution.y
+    energy = (
+        0.5 * parameters.moment_of_inertia * angular_velocity**2
+        + parameters.restoring_torque_scale * (1 - np.cos(angle))
+    )
+    return PendulumResult(
         time=solution.t,
-        x=solution.y[0],
-        y=solution.y[1],
-        vx=solution.y[2],
-        vy=solution.y[3],
-        apex_height=apex_height,
+        angle=angle,
+        angular_velocity=angular_velocity,
+        energy=energy,
+        downward_crossings=solution.t_events[0],
     )

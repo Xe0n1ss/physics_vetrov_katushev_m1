@@ -1,196 +1,49 @@
+"""Numerical tests against exact periods, energy balance and linear limit."""
+
+import numpy as np
 import pytest
 
-from src.analytical import (
-    vacuum_flight_time,
-    vacuum_max_height,
-    vacuum_range,
-    linear_position_x,
-    linear_position_y,
-    linear_velocity_x,
-    linear_velocity_y,
-
-)
-from src.models import DragModel, LaunchParameters
-from src.solver import solve_trajectory
+from src.analytical import exact_frictionless_period, small_angle_damped_angle
+from src.models import InitialConditions, PendulumParameters
+from src.solver import solve_pendulum
 
 
-def test_numerical_solution_matches_vacuum_theory() -> None:
-    parameters = LaunchParameters(
-        initial_speed=20.0,
-        angle_deg=45.0,
-        mass=0.2,
-    )
-
-    result = solve_trajectory(
-        parameters=parameters,
-        model=DragModel.NONE,
-    )
-
-    assert result.flight_time == pytest.approx(
-        vacuum_flight_time(parameters),
-        rel=1e-9,
-    )
-
-    assert result.horizontal_range == pytest.approx(
-        vacuum_range(parameters),
-        rel=1e-9,
-    )
-
-    assert result.max_height == pytest.approx(
-        vacuum_max_height(parameters),
-        abs=5e-4,
-    )
-
-    assert result.y[-1] == pytest.approx(
-        0.0,
-        abs=1e-10,
-    )
-
-    assert result.impact_speed == pytest.approx(
-        parameters.initial_speed,
-        rel=1e-9,
-    )
+@pytest.fixture
+def ideal_parameters() -> PendulumParameters:
+    return PendulumParameters(0.8, 0.2, 0.08, 0.5)
 
 
-def test_zero_drag_matches_vacuum() -> None:
-    parameters = LaunchParameters(
-        initial_speed=20.0,
-        angle_deg=45.0,
-        mass=0.2,
-    )
+@pytest.mark.parametrize("amplitude", [5, 60, 150])
+def test_numerical_period_matches_exact_theory(
+    ideal_parameters: PendulumParameters, amplitude: float
+) -> None:
+    result = solve_pendulum(ideal_parameters, InitialConditions(amplitude), duration=8)
+    theory = exact_frictionless_period(ideal_parameters, amplitude)
+    assert result.period == pytest.approx(theory, rel=2e-8)
 
-    vacuum_result = solve_trajectory(
-        parameters=parameters,
-        model=DragModel.NONE,
-    )
 
-    linear_result = solve_trajectory(
-        parameters=parameters,
-        model=DragModel.LINEAR,
-        drag_coeff=0.0,
-    )
+def test_energy_is_conserved_without_friction(ideal_parameters: PendulumParameters) -> None:
+    result = solve_pendulum(ideal_parameters, InitialConditions(60))
+    assert result.relative_energy_drift < 1e-8
 
-    quadratic_result = solve_trajectory(
-        parameters=parameters,
-        model=DragModel.QUADRATIC,
-        drag_coeff=0.0,
-    )
 
-    assert linear_result.flight_time == pytest.approx(
-        vacuum_result.flight_time
-    )
+def test_damped_energy_obeys_dissipation_law() -> None:
+    parameters = PendulumParameters(0.8, 0.2, 0.08, 0.5, damping=0.015)
+    result = solve_pendulum(parameters, InitialConditions(60))
+    assert result.energy[-1] < result.energy[0]
+    assert np.max(np.diff(result.energy)) < 1e-9
+    dissipated = parameters.damping * np.trapezoid(result.angular_velocity**2, result.time)
+    assert result.energy[0] - result.energy[-1] == pytest.approx(dissipated, rel=2e-4)
 
-    assert linear_result.horizontal_range == pytest.approx(
-        vacuum_result.horizontal_range
-    )
 
-    assert quadratic_result.flight_time == pytest.approx(
-        vacuum_result.flight_time
-    )
+def test_small_angle_damped_motion_matches_linear_solution() -> None:
+    parameters = PendulumParameters(0.8, 0.2, 0.08, 0.5, damping=0.015)
+    result = solve_pendulum(parameters, InitialConditions(1), duration=8)
+    theory = np.array([small_angle_damped_angle(t, parameters, 1) for t in result.time])
+    assert np.max(np.abs(result.angle - theory)) < 2e-5
 
-    assert quadratic_result.horizontal_range == pytest.approx(
-        vacuum_result.horizontal_range
-    )
 
-def test_numerical_solution_matches_linear_theory() -> None:
-    parameters = LaunchParameters(
-        initial_speed=20.0,
-        angle_deg=45.0,
-        mass=0.2,
-    )
-    drag_coeff = 0.02
-
-    result = solve_trajectory(
-        parameters=parameters,
-        model=DragModel.LINEAR,
-        drag_coeff=drag_coeff,
-    )
-
-    expected_x = [
-        linear_position_x(t, parameters, drag_coeff)
-        for t in result.time
-    ]
-    expected_y = [
-        linear_position_y(t, parameters, drag_coeff)
-        for t in result.time
-    ]
-    expected_vx = [
-        linear_velocity_x(t, parameters, drag_coeff)
-        for t in result.time
-    ]
-    expected_vy = [
-        linear_velocity_y(t, parameters, drag_coeff)
-        for t in result.time
-    ]
-
-    assert result.x == pytest.approx(expected_x, rel=0, abs=1e-9)
-    assert result.y == pytest.approx(expected_y, rel=0, abs=1e-9)
-    assert result.vx == pytest.approx(expected_vx, rel=0, abs=1e-9)
-    assert result.vy == pytest.approx(expected_vy, rel=0, abs=1e-9)
-
-def test_apex_event_finds_max_height() -> None:
-    parameters = LaunchParameters(
-        initial_speed=20.0,
-        angle_deg=45.0,
-        mass=0.2,
-    )
-
-    result = solve_trajectory(
-        parameters=parameters,
-        model=DragModel.NONE,
-        max_step=1.0,
-        rtol=1e-3,
-        atol=1e-6,
-    )
-
-    assert result.apex_height is not None
-    assert result.max_height == pytest.approx(
-        vacuum_max_height(parameters),
-        abs=1e-9,
-    )
-
-def test_quadratic_solution_converges() -> None:
-    parameters = LaunchParameters(
-        initial_speed=20.0,
-        angle_deg=45.0,
-        mass=0.2,
-    )
-
-    coarse = solve_trajectory(
-        parameters,
-        DragModel.QUADRATIC,
-        drag_coeff=0.001,
-        max_step=1.0,
-        rtol=1e-3,
-        atol=1e-6,
-    )
-
-    medium = solve_trajectory(
-        parameters,
-        DragModel.QUADRATIC,
-        drag_coeff=0.001,
-        max_step=0.2,
-        rtol=1e-5,
-        atol=1e-8,
-    )
-
-    fine = solve_trajectory(
-        parameters,
-        DragModel.QUADRATIC,
-        drag_coeff=0.001,
-        max_step=0.02,
-        rtol=1e-9,
-        atol=1e-11,
-    )
-
-    assert abs(medium.flight_time - fine.flight_time) < abs(
-        coarse.flight_time - medium.flight_time
-    )
-
-    assert abs(medium.horizontal_range - fine.horizontal_range) < abs(
-        coarse.horizontal_range - medium.horizontal_range
-    )
-
-    assert abs(medium.max_height - fine.max_height) < abs(
-        coarse.max_height - medium.max_height
-    )
+def test_short_simulation_cannot_measure_period(ideal_parameters: PendulumParameters) -> None:
+    result = solve_pendulum(ideal_parameters, InitialConditions(60), duration=0.1)
+    with pytest.raises(ValueError):
+        _ = result.period
