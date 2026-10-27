@@ -1,5 +1,3 @@
-"""Numerical tests against exact periods, energy balance and linear limit."""
-
 import numpy as np
 import pytest
 

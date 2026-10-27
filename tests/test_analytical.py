@@ -1,5 +1,3 @@
-"""Independent theoretical limits for the nonlinear numerical model."""
-
 from math import radians
 
 import pytest

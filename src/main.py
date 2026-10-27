@@ -1,5 +1,3 @@
-"""Reproduce the numerical experiments and save figures for the report."""
-
 from __future__ import annotations
 
 import argparse

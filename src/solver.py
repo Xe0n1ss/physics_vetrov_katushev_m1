@@ -1,5 +1,3 @@
-"""Numerical integration and period measurement for the physical pendulum."""
-
 from dataclasses import dataclass
 from math import isfinite
 
@@ -20,10 +18,10 @@ _downward_crossing.terminal = False
 @dataclass(frozen=True)
 class PendulumResult:
     time: np.ndarray
-    angle: np.ndarray  # rad
-    angular_velocity: np.ndarray  # rad/s
-    energy: np.ndarray  # J
-    downward_crossings: np.ndarray  # s; one crossing per full oscillation
+    angle: np.ndarray
+    angular_velocity: np.ndarray
+    energy: np.ndarray
+    downward_crossings: np.ndarray
 
     @property
     def period(self) -> float:

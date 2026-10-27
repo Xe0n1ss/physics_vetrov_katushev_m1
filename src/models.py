@@ -1,21 +1,15 @@
-"""Geometry and differential equation of a rigid physical pendulum.
-
-The rod is pivoted at its upper end; the solid sphere is attached to its lower
-end, so its centre is ``rod_length + sphere_radius`` from the pivot.
-"""
-
 from dataclasses import dataclass
 from math import cos, isfinite, radians, sin
 
 
 @dataclass(frozen=True)
 class PendulumParameters:
-    rod_length: float  # m
-    rod_mass: float  # kg
-    sphere_radius: float  # m
-    sphere_mass: float  # kg
-    gravity: float = 9.81  # m/s²
-    damping: float = 0.0  # N·m·s/rad; torque = -damping * angular_velocity
+    rod_length: float
+    rod_mass: float
+    sphere_radius: float
+    sphere_mass: float
+    gravity: float = 9.81
+    damping: float = 0.0
 
     def __post_init__(self) -> None:
         positive = (
@@ -56,11 +50,9 @@ class PendulumParameters:
 
     @property
     def restoring_torque_scale(self) -> float:
-        """M*g*d in N·m."""
         return self.total_mass * self.gravity * self.center_of_mass_distance
 
     def energy(self, angle_rad: float, angular_velocity: float) -> float:
-        """Kinetic plus potential energy relative to the downward equilibrium."""
         return (
             0.5 * self.moment_of_inertia * angular_velocity**2
             + self.restoring_torque_scale * (1 - cos(angle_rad))
@@ -70,7 +62,7 @@ class PendulumParameters:
 @dataclass(frozen=True)
 class InitialConditions:
     angle_deg: float
-    angular_velocity: float = 0.0  # rad/s
+    angular_velocity: float = 0.0
 
     def __post_init__(self) -> None:
         if not isfinite(self.angle_deg) or not -180 < self.angle_deg < 180:
@@ -88,7 +80,6 @@ def motion_equations(
     state: tuple[float, float],
     parameters: PendulumParameters,
 ) -> tuple[float, float]:
-    """State = (angle, angular velocity); angle is measured from downward vertical."""
     angle, angular_velocity = state
     angular_acceleration = (
         -parameters.restoring_torque_scale * sin(angle)

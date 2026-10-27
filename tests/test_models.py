@@ -1,5 +1,3 @@
-"""Checks for the chosen rod-and-sphere geometry and equation of motion."""
-
 from math import pi
 
 import pytest
