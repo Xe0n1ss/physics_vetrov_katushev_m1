@@ -8,7 +8,7 @@ class PendulumParameters:
     rod_mass: float
     sphere_radius: float
     sphere_mass: float
-    gravity: float = 9.81
+    gravity: float
     damping: float = 0.0
 
     def __post_init__(self) -> None:
@@ -23,6 +23,17 @@ class PendulumParameters:
             raise ValueError("Длины, массы и ускорение свободного падения должны быть положительными и конечными")
         if not isfinite(self.damping) or self.damping < 0:
             raise ValueError("Коэффициент трения должен быть неотрицательным и конечным")
+        try:
+            derived = (
+                self.total_mass,
+                self.center_of_mass_distance,
+                self.moment_of_inertia,
+                self.restoring_torque_scale,
+            )
+        except (OverflowError, ZeroDivisionError) as error:
+            raise ValueError("Параметры выходят за вычислимый диапазон") from error
+        if not all(isfinite(value) and value > 0 for value in derived):
+            raise ValueError("Параметры выходят за вычислимый диапазон")
 
     @property
     def total_mass(self) -> float:

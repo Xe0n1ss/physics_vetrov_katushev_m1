@@ -7,7 +7,7 @@ from src.models import InitialConditions, PendulumParameters, motion_equations
 
 @pytest.fixture
 def parameters() -> PendulumParameters:
-    return PendulumParameters(rod_length=0.8, rod_mass=0.2, sphere_radius=0.08, sphere_mass=0.5)
+    return PendulumParameters(rod_length=0.8, rod_mass=0.2, sphere_radius=0.08, sphere_mass=0.5, gravity=9.81)
 
 
 def test_geometry_and_inertia(parameters: PendulumParameters) -> None:
@@ -27,7 +27,7 @@ def test_equation_and_energy(parameters: PendulumParameters) -> None:
 
 
 def test_viscous_torque_changes_acceleration(parameters: PendulumParameters) -> None:
-    damped = PendulumParameters(0.8, 0.2, 0.08, 0.5, damping=0.015)
+    damped = PendulumParameters(0.8, 0.2, 0.08, 0.5, 9.81, damping=0.015)
     ideal_acceleration = motion_equations(0.0, (0.0, 2.0), parameters)[1]
     damped_acceleration = motion_equations(0.0, (0.0, 2.0), damped)[1]
     assert ideal_acceleration == 0.0
@@ -36,9 +36,11 @@ def test_viscous_torque_changes_acceleration(parameters: PendulumParameters) -> 
 
 def test_invalid_inputs() -> None:
     with pytest.raises(ValueError):
-        PendulumParameters(0.0, 0.2, 0.08, 0.5)
+        PendulumParameters(0.0, 0.2, 0.08, 0.5, 9.81)
     with pytest.raises(ValueError):
-        PendulumParameters(0.8, 0.2, 0.08, 0.5, damping=-0.01)
+        PendulumParameters(0.8, 0.2, 0.08, 0.5, 9.81, damping=-0.01)
+    with pytest.raises(ValueError):
+        PendulumParameters(1e308, 0.2, 0.08, 0.5, 9.81)
     with pytest.raises(ValueError):
         InitialConditions(180)
     assert InitialConditions(60).angle_rad == pytest.approx(pi / 3)

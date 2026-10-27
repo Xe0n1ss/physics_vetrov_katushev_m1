@@ -8,7 +8,7 @@ from src.solver import solve_pendulum
 
 @pytest.fixture
 def ideal_parameters() -> PendulumParameters:
-    return PendulumParameters(0.8, 0.2, 0.08, 0.5)
+    return PendulumParameters(0.8, 0.2, 0.08, 0.5, 9.81)
 
 
 @pytest.mark.parametrize("amplitude", [5, 60, 150])
@@ -26,7 +26,7 @@ def test_energy_is_conserved_without_friction(ideal_parameters: PendulumParamete
 
 
 def test_damped_energy_obeys_dissipation_law() -> None:
-    parameters = PendulumParameters(0.8, 0.2, 0.08, 0.5, damping=0.015)
+    parameters = PendulumParameters(0.8, 0.2, 0.08, 0.5, 9.81, damping=0.015)
     result = solve_pendulum(parameters, InitialConditions(60))
     assert result.energy[-1] < result.energy[0]
     assert np.max(np.diff(result.energy)) < 1e-9
@@ -35,7 +35,7 @@ def test_damped_energy_obeys_dissipation_law() -> None:
 
 
 def test_small_angle_damped_motion_matches_linear_solution() -> None:
-    parameters = PendulumParameters(0.8, 0.2, 0.08, 0.5, damping=0.015)
+    parameters = PendulumParameters(0.8, 0.2, 0.08, 0.5, 9.81, damping=0.015)
     result = solve_pendulum(parameters, InitialConditions(1), duration=8)
     theory = np.array([small_angle_damped_angle(t, parameters, 1) for t in result.time])
     assert np.max(np.abs(result.angle - theory)) < 2e-5

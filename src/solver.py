@@ -48,10 +48,14 @@ def solve_pendulum(
 ) -> PendulumResult:
     if not isfinite(duration) or duration <= 0:
         raise ValueError("Длительность расчёта должна быть положительной и конечной")
-    if samples < 2:
+    if isinstance(samples, bool) or not isinstance(samples, int) or samples < 2:
         raise ValueError("Нужно как минимум две точки графика")
     if not isfinite(max_step) or max_step <= 0:
         raise ValueError("Шаг интегрирования должен быть положительным и конечным")
+    if not isfinite(rtol) or rtol <= 0:
+        raise ValueError("Относительная точность должна быть положительной и конечной")
+    if not isfinite(atol) or atol <= 0:
+        raise ValueError("Абсолютная точность должна быть положительной и конечной")
 
     times = np.linspace(0.0, duration, samples)
     solution = solve_ivp(

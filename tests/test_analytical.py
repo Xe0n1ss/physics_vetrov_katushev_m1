@@ -13,7 +13,7 @@ from src.models import PendulumParameters
 
 @pytest.fixture
 def parameters() -> PendulumParameters:
-    return PendulumParameters(0.8, 0.2, 0.08, 0.5)
+    return PendulumParameters(0.8, 0.2, 0.08, 0.5, 9.81)
 
 
 def test_exact_period_tends_to_small_angle_limit(parameters: PendulumParameters) -> None:
@@ -23,7 +23,7 @@ def test_exact_period_tends_to_small_angle_limit(parameters: PendulumParameters)
 
 
 def test_damped_small_angle_solution_starts_from_rest() -> None:
-    parameters = PendulumParameters(0.8, 0.2, 0.08, 0.5, damping=0.015)
+    parameters = PendulumParameters(0.8, 0.2, 0.08, 0.5, 9.81, damping=0.015)
     angle = small_angle_damped_angle(0.0, parameters, 5)
     numerical_initial_slope = (
         small_angle_damped_angle(1e-5, parameters, 5)
@@ -39,7 +39,7 @@ def test_invalid_amplitude_and_overdamping(parameters: PendulumParameters) -> No
         exact_frictionless_period(parameters, 180)
     with pytest.raises(ValueError):
         exact_frictionless_period(parameters, -1)
-    overdamped = PendulumParameters(0.8, 0.2, 0.08, 0.5, damping=10)
+    overdamped = PendulumParameters(0.8, 0.2, 0.08, 0.5, 9.81, damping=10)
     with pytest.raises(ValueError):
         small_angle_damped_period(overdamped)
     with pytest.raises(ValueError):
