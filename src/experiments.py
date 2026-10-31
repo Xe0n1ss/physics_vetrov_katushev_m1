@@ -11,6 +11,12 @@ from src.solver import PendulumResult, solve_pendulum
 
 GRAVITY = 9.81
 DAMPING_LIMIT_FRACTION = 0.1
+LABORATORY_LIMITS = {
+    "rod_length": 3.0,
+    "rod_mass": 50.0,
+    "sphere_radius": 0.5,
+    "sphere_mass": 100.0,
+}
 AMPLITUDES = (5.0, 15.0, 30.0, 60.0, 90.0, 120.0, 150.0)
 COMPARISON_ANGLE = 60.0
 SMALL_ANGLE = 1.0
@@ -27,6 +33,9 @@ def _positive_number(fields: Mapping[str, str], name: str, label: str) -> float:
         raise ValueError(f"{label}: введите число") from error
     if not isfinite(value) or value <= 0:
         raise ValueError(f"{label}: нужно положительное конечное число")
+    maximum = LABORATORY_LIMITS.get(name)
+    if maximum is not None and value > maximum:
+        raise ValueError(f"{label}: для лабораторной установки значение не должно превышать {maximum:g}")
     return value
 
 

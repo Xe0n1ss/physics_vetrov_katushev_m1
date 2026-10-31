@@ -11,7 +11,7 @@ from matplotlib.figure import Figure
 import numpy as np
 
 from src.analytical import small_angle_damped_period, small_angle_period
-from src.experiments import ExperimentConfig, ExperimentResult, run_experiment
+from src.experiments import LABORATORY_LIMITS, ExperimentConfig, ExperimentResult, run_experiment
 
 
 PHYSICAL_FIELDS = (
@@ -33,12 +33,14 @@ INITIAL_VALUES = {
 
 def _field_markup(name: str, label: str, unit: str, values: dict[str, str]) -> str:
     value = escape(values.get(name, ""), quote=True)
+    maximum = LABORATORY_LIMITS.get(name)
+    hint = f"{unit}; больше 0, не больше {maximum:g} {unit}" if maximum is not None else unit
     return (
         f'<label class="field" for="{name}">'
         f'<span>{escape(label)}</span>'
         f'<input id="{name}" name="{name}" value="{value}" required '
         'type="text" inputmode="decimal" autocomplete="off">'
-        f'<small>{escape(unit)}</small>'
+        f'<small>{escape(hint)}</small>'
         "</label>"
     )
 

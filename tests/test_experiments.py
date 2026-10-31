@@ -5,7 +5,7 @@ from urllib.parse import urlencode
 
 import pytest
 
-from src.experiments import ExperimentConfig, run_experiment
+from src.experiments import LABORATORY_LIMITS, ExperimentConfig, run_experiment
 from src.gui import PendulumHandler, render_page
 
 
@@ -50,6 +50,15 @@ def test_friction_limit_depends_on_body(fields: dict[str, str]) -> None:
     assert ExperimentConfig.from_fields(heavier).damping == 0.5
 
 
+@pytest.mark.parametrize("name", LABORATORY_LIMITS)
+def test_laboratory_upper_limits(fields: dict[str, str], name: str) -> None:
+    maximum = LABORATORY_LIMITS[name]
+    accepted = ExperimentConfig.from_fields({**fields, name: str(maximum)})
+    assert getattr(accepted.parameters, name) == maximum
+    with pytest.raises(ValueError, match="лабораторной установки"):
+        ExperimentConfig.from_fields({**fields, name: str(maximum * 1.01)})
+
+
 @pytest.mark.parametrize(
     ("name", "value"),
     [
@@ -82,6 +91,7 @@ def test_result_and_browser_page(fields: dict[str, str]) -> None:
     assert page.count("data:image/png;base64,") == 4
     assert "Фазовый портрет" in page
     assert "0.8" in page
+    assert "не больше 3 м" in page
 
 
 def test_local_web_interface_accepts_form(fields: dict[str, str]) -> None:
@@ -103,6 +113,16 @@ def test_local_web_interface_accepts_form(fields: dict[str, str]) -> None:
         response = connection.getresponse()
         assert response.status == 200
         assert "нужно положительное" in response.read().decode("utf-8")
+
+        connection.request(
+            "POST",
+            "/run",
+            body=urlencode({**fields, "rod_length": "4"}),
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        response = connection.getresponse()
+        assert response.status == 200
+        assert "лабораторной установки" in response.read().decode("utf-8")
 
         connection.request(
             "POST",
