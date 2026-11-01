@@ -1,41 +1,156 @@
-from math import cos, exp, pi, radians, sin, sqrt
+from src.models import LaunchParameters
+from math import exp, sqrt
 
-from scipy.special import ellipk
+def vacuum_position(
+        time: float,
+        parameters: LaunchParameters,
+) -> tuple[float, float]:
+    vx0, vy0 = parameters.initial_velocity()
 
-from src.models import PendulumParameters
+    x = vx0 * time
 
-
-def small_angle_period(parameters: PendulumParameters) -> float:
-    return 2 * pi * sqrt(parameters.moment_of_inertia / parameters.restoring_torque_scale)
-
-
-def exact_frictionless_period(parameters: PendulumParameters, amplitude_deg: float) -> float:
-    if not 0 <= amplitude_deg < 180:
-        raise ValueError("Амплитуда должна лежать в диапазоне [0°, 180°)")
-    modulus_squared = sin(radians(amplitude_deg) / 2) ** 2
-    return 4 * sqrt(parameters.moment_of_inertia / parameters.restoring_torque_scale) * float(
-        ellipk(modulus_squared)
+    y = (
+        parameters.initial_height
+        + vy0 * time
+        - parameters.gravity * time ** 2 / 2
     )
 
+    return x, y
 
-def small_angle_damped_period(parameters: PendulumParameters) -> float:
-    omega_0_squared = parameters.restoring_torque_scale / parameters.moment_of_inertia
-    gamma = parameters.damping / (2 * parameters.moment_of_inertia)
-    if gamma**2 >= omega_0_squared:
-        raise ValueError("При таком трении малые колебания не являются затухающими колебаниями")
-    return 2 * pi / sqrt(omega_0_squared - gamma**2)
+def vacuum_velocity(
+        time: float,
+        parameters: LaunchParameters,
+) -> tuple[float, float]:
+    vx0, vy0 = parameters.initial_velocity()
 
+    vx = vx0
+    vy = vy0 - parameters.gravity * time
 
-def small_angle_damped_angle(
-    time: float, parameters: PendulumParameters, initial_angle_deg: float
+    return vx, vy
+
+def vacuum_time_to_apex(
+        parameters: LaunchParameters,
 ) -> float:
-    if time < 0:
-        raise ValueError("Время не может быть отрицательным")
-    omega_0_squared = parameters.restoring_torque_scale / parameters.moment_of_inertia
-    gamma = parameters.damping / (2 * parameters.moment_of_inertia)
-    if gamma**2 >= omega_0_squared:
-        raise ValueError("Аналитическая формула задана для слабого трения")
-    omega_d = sqrt(omega_0_squared - gamma**2)
-    return radians(initial_angle_deg) * exp(-gamma * time) * (
-        cos(omega_d * time) + gamma / omega_d * sin(omega_d * time)
+    _, vy0 = parameters.initial_velocity()
+
+    time_to_apex = vy0 / parameters.gravity
+
+    return time_to_apex
+
+
+def vacuum_max_height(
+        parameters: LaunchParameters,
+) -> float:
+    time_to_apex = vacuum_time_to_apex(parameters)
+
+    _, max_height = vacuum_position(
+        time=time_to_apex,
+        parameters=parameters,
     )
+
+    return max_height
+
+def vacuum_flight_time(
+        parameters: LaunchParameters,
+) -> float:
+    _, vy0 = parameters.initial_velocity()
+
+    discriminant = (
+        vy0 ** 2
+        + 2
+        * parameters.gravity
+        * parameters.initial_height
+    )
+
+    flight_time = (
+        vy0 + sqrt(discriminant)
+    ) / parameters.gravity
+
+    return flight_time
+
+
+def vacuum_range(
+        parameters: LaunchParameters,
+) -> float:
+    flight_time = vacuum_flight_time(parameters)
+
+    horizontal_range, _ = vacuum_position(
+        time=flight_time,
+        parameters=parameters,
+    )
+
+    return horizontal_range
+
+def linear_velocity_x(
+        time: float,
+        parameters: LaunchParameters,
+        drag_coeff: float,
+) -> float:
+    vx0, _ = parameters.initial_velocity()
+
+    vx = vx0 * exp(
+        -drag_coeff * time / parameters.mass
+    )
+
+    return vx
+
+
+def linear_velocity_y(
+        time: float,
+        parameters: LaunchParameters,
+        drag_coeff: float,
+) -> float:
+    _, vy0 = parameters.initial_velocity()
+
+    if drag_coeff == 0:
+        return vy0 - parameters.gravity * time
+
+    gamma = drag_coeff / parameters.mass
+
+    vy = (
+        (vy0 + parameters.gravity / gamma)
+        * exp(-gamma * time)
+        - parameters.gravity / gamma
+    )
+
+    return vy
+
+
+def linear_position_x(
+        time: float,
+        parameters: LaunchParameters,
+        drag_coeff: float,
+) -> float:
+    vx0, _ = parameters.initial_velocity()
+
+    if drag_coeff == 0:
+        return vx0 * time
+
+    gamma = drag_coeff / parameters.mass
+
+    x = vx0 * (1 - exp(-gamma * time)) / gamma
+
+    return x
+
+def linear_position_y(
+        time: float,
+        parameters: LaunchParameters,
+        drag_coeff: float,
+) -> float:
+    _, vy0 = parameters.initial_velocity()
+
+    if drag_coeff == 0:
+        _, y = vacuum_position(time, parameters)
+        return y
+
+    gamma = drag_coeff / parameters.mass
+
+    y = (
+        parameters.initial_height
+        + (vy0 + parameters.gravity / gamma)
+        * (1 - exp(-gamma * time))
+        / gamma
+        - parameters.gravity * time / gamma
+    )
+
+    return y
